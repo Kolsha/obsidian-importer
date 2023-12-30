@@ -274,6 +274,21 @@ export default class ImporterPlugin extends Plugin {
 			},
 		});
 
+		this.addCommand({
+			id: 'import-apple-notes',
+			name: 'Import Apple Notes',
+			callback: () => {
+				const modal = new ImporterModal(this.app, this);
+				const importer = modal.importer as AppleNotesImporter;
+				importer.outputLocation = "Wiki/icloud/notes";
+				importer.omitFirstLine = false;
+				importer.includeHandwriting = true;
+				modal.open();
+				modal.contentEl.find(".mod-cta").click();
+				// new Notice("Import would run in background");
+			},
+		});
+
 		this.registerObsidianProtocolHandler('importer-auth',
 			(data) => {
 				if (this.authCallback) {
