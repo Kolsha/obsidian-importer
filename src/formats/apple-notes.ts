@@ -9,6 +9,7 @@ import { FormatImporter } from '../format-importer';
 import { Root } from 'protobufjs';
 import SQLiteTag from './apple-notes/sqlite/index';
 import { SQLiteTagSpawned } from './apple-notes/models';
+import moment from 'moment';
 
 const NOTE_FOLDER_PATH = 'Library/Group Containers/group.com.apple.notes';
 const NOTE_DB = 'NoteStore.sqlite';
@@ -33,9 +34,10 @@ export class AppleNotesImporter extends FormatImporter {
 	noteCount = 0;
 	parsedNotes = 0;
 	
-	omitFirstLine = true;
+	omitFirstLine = false;
 	importTrashed = false;
-	includeHandwriting = false;
+	includeHandwriting = true;
+	addDatesToFrontmatter = true;
 	trashFolders: number[] = [];
 	
 	init(): void {
@@ -49,7 +51,7 @@ export class AppleNotesImporter extends FormatImporter {
 			return;
 		}
 		
-		this.addOutputLocationSetting('Apple Notes');
+		this.addOutputLocationSetting('Wiki/icloud/notes');
 		
 		new Setting(this.modal.contentEl)
 			.setName('Import recently deleted notes')
@@ -69,7 +71,7 @@ export class AppleNotesImporter extends FormatImporter {
 				' as the title. It will still be used as the note name.'
 			)
 			.addToggle(t => t
-				.setValue(true)
+				.setValue(false)
 				.onChange(async v => this.omitFirstLine = v)
 			);
 			
@@ -79,7 +81,7 @@ export class AppleNotesImporter extends FormatImporter {
 				'When Apple Notes has detected handwriting in drawings, include it as text before the drawing.'
 			)
 			.addToggle(t => t
-				.setValue(false)
+				.setValue(true)
 				.onChange(async v => this.includeHandwriting = v)
 			);
 	}
@@ -261,11 +263,25 @@ export class AppleNotesImporter extends FormatImporter {
 		
 		// Notes may reference other notes, so we want them in resolvedFiles before we parse to avoid cycles
 		const converter = this.decodeData(row.zhexdata, NoteConverter);
+		const ctime = this.decodeTime(row.ZCREATIONDATE3 || row.ZCREATIONDATE2 || row.ZCREATIONDATE1);
+		const mtime = this.decodeTime(row.ZMODIFICATIONDATE1);
 		
 		this.vault.modify(file, await converter.format(), { 
-			ctime: this.decodeTime(row.ZCREATIONDATE3 || row.ZCREATIONDATE2 || row.ZCREATIONDATE1),
-			mtime: this.decodeTime(row.ZMODIFICATIONDATE1) 
+			ctime: ctime,
+			mtime: mtime 
 		});
+
+		if (this.addDatesToFrontmatter) {
+			this.app.fileManager.processFrontMatter(file, (fm) => {
+				fm['ctime'] = ctime;
+				fm['mtime'] = mtime;
+			  }, 
+			  { 
+				ctime: ctime,
+				mtime: mtime 
+			  }
+			);
+		}
 		
 		this.parsedNotes++;
 		this.ctx.reportProgress(this.parsedNotes, this.noteCount);
@@ -406,7 +422,9 @@ export class AppleNotesImporter extends FormatImporter {
 			this.cachedAttachmentPath = attachmentPath;
 		}
 		
-		this.createFolders(attachmentPath);
+		const attachmentFolder = await this.createFolders(attachmentPath);
+		this.app.vault.delete(attachmentFolder, true);
+		console.log((await this.vault.createFolder(attachmentPath)).path);
 		return attachmentPath;
 	}
 }

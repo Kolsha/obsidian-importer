@@ -126,6 +126,10 @@ export abstract class FormatImporter {
 		}
 
 		let folder = vault.getAbstractFileByPath(folderPath);
+		if (folder != null) {
+			vault.delete(folder, true);
+			folder = null;
+		}
 
 		if (folder === null || !(folder instanceof TFolder)) {
 			await vault.createFolder(folderPath);
